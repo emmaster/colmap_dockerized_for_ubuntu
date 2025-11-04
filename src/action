@@ -42,6 +42,21 @@ then
     exit 1
 fi
 
+VIDEOS_NAS_DIR="/VIDEOS_NAS"
+SCENES_NAS_DIR="/SCENES_NAS"
+
+if [ ! -d "$VIDEOS_NAS_DIR" ]; then
+  echo "❌ Input directory on NAS not found or not mounted."
+  echo "Expected path: $VIDEOS_NAS_DIR"
+  exit 1
+fi
+if [ ! -d "$SCENES_NAS_DIR" ]; then
+  echo "❌ Output directory on NAS not found or not mounted."
+  echo "Expected path: $SCENES_NAS_DIR"
+  exit 1
+fi
+
+
 VIDEOS_DIR="/VIDEOS"
 SCENES_DIR="/SCENES"
 
@@ -53,6 +68,16 @@ if [ ! -d "$SCENES_DIR" ]; then
   echo "The directory $SCENES_DIR does not exist."
   exit 1
 fi
+
+
+# COPY FROM NAS TO LOCAL
+echo "Copying video files from NAS ..."
+rm -rf "$VIDEOS_DIR"/*
+rm -rf "$SCENES_DIR"/*
+cp -r "$VIDEOS_NAS_DIR"/* "$VIDEOS_DIR"/
+cp -r "$SCENES_NAS_DIR"/* "$SCENES_DIR"/
+echo "Copy complete."
+
 
 
 process_video_file () {
@@ -131,3 +156,9 @@ do
 done
 
 echo "Finished."
+
+# COPY BACK TO NAS
+echo "Copying scene files back to NAS ..."
+rm -rf "$SCENES_NAS_DIR"/*
+cp -r "$SCENES_DIR"/* "$SCENES_NAS_DIR"/
+echo "Copy complete. All done."

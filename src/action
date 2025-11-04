@@ -110,7 +110,7 @@ process_video_file () {
     --database_path "$SCENES_DIR/$2/database.db" \
     --image_path    "$IMG_DIR" \
     --ImageReader.single_camera 1 \
-    --SiftExtraction.use_gpu 1 \
+    --SiftExtraction.use_gpu 0 \
     --SiftExtraction.max_image_size 4096
 
   echo "[3/4] Matching features ..."
@@ -118,7 +118,7 @@ process_video_file () {
   colmap sequential_matcher \
     --database_path "$SCENES_DIR/$2/database.db" \
     --SequentialMatching.overlap 15 \
-    --SiftMatching.use_gpu 1
+    --SiftMatching.use_gpu 0
 
   echo "[4/4] Mapping ..."
 

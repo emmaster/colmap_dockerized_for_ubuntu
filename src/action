@@ -1,0 +1,133 @@
+#!/bin/bash
+echo "COOL I'm here"
+cat /in/input > /out/output
+
+# This script was created by:
+# Wolkensteine (https://mastodon.wolkenheim.eu/@Wolkensteine)
+# It is provided free of charge and comes with no warrenty.
+# Use this at your own risk.
+#
+# Use case:
+# As described in Polyfjords video (https://youtu.be/xx85eyN1Xc0) this is about making a very simple 3D-Tracking workflow with only open source software.
+#
+# Why this?
+# Because Linux is open source software and Windows is mostly not.
+#
+# Anything else?
+# Yes! This script can not be used just like the Windows one. Here are more detailed instructions:
+# 1. You will have to create a folder as your workspace. 
+# 2. Put this script into that folder.
+# 3. Put 3 subfolders within that folder. These should be named as following: "VIDEOS" "SCENES". 
+#    They serve the same purpose as the folders 02 and 04 in the Windows version explained by Polyfjord.
+# 4. You need to make sure that ffmpeg is installed.
+# 5. You also need to make sure that you have a version of colmap (https://github.com/colmap/colmap) installed. (For Debian, its derivatives, Arch and NixOS there are packages directly available. On Fedora based systems it seems the command is provided through another program called geomorph which can be automatically installed by running dnf install colmap)
+# 6. You furthermore need to make sure you have glomap (https://github.com/colmap/glomap) installed and in your path. 
+# 7. Put your videos into the "VIDEOS" folder.
+# 8. Go to the base directory (your working folder) and start the script.
+#
+# This script can be found on codeberg.org:
+# https://codeberg.org/wolkensteine/Polyfjord-COLMAP-Workflow
+
+THREADS_TO_USE="$(getconf _NPROCESSORS_ONLN)"
+
+if ! command -v ffmpeg >/dev/null 2>&1
+then
+    echo "ffmpeg could not be found. Please check that it is installed and within your PATH."
+    exit 1
+fi
+
+if ! command -v colmap >/dev/null 2>&1
+then
+    echo "colmap could not be found. Please check that it is installed and within your PATH."
+    exit 1
+fi
+
+VIDEOS_DIR="/VIDEOS"
+SCENES_DIR="/SCENES"
+
+if [ ! -d "$VIDEOS_DIR" ]; then
+  echo "The directory $VIDEOS_DIR does not exist."
+  exit 1
+fi
+if [ ! -d "$SCENES_DIR" ]; then
+  echo "The directory $SCENES_DIR does not exist."
+  exit 1
+fi
+
+
+process_video_file () {
+  echo "Processing: $1"
+
+  if [ -d "$SCENES_DIR/$2" ]; then
+    echo "↻ Skipping $1 – it looks to be already reconstructed."
+    return
+  fi
+
+  IMG_DIR="$SCENES_DIR/$2/images"
+  SPARSE_DIR="$SCENES_DIR/$2/sparse"
+
+  mkdir -p "$IMG_DIR"
+  mkdir -p "$SPARSE_DIR"
+
+  echo "[1/4] Extracting frames."
+
+  ffmpeg -stats -i "$1" -qscale:v 2 "$IMG_DIR/frame_%06d.jpg"
+
+  echo "[2/4] Extracting features ..."
+
+  colmap feature_extractor \
+    --database_path "$SCENES_DIR/$2/database.db" \
+    --image_path    "$IMG_DIR" \
+    --ImageReader.single_camera 1 \
+    --SiftExtraction.use_gpu 0 \
+    --SiftExtraction.max_image_size 4096
+
+  echo "[3/4] Matching features ..."
+
+  colmap sequential_matcher \
+    --database_path "$SCENES_DIR/$2/database.db" \
+    --SequentialMatching.overlap 15 \
+    --SiftMatching.use_gpu 0
+
+  echo "[4/4] Mapping ..."
+
+#   glomap mapper \
+#         --database_path "$SCENES_DIR/$2/database.db" \
+#         --image_path "$IMG_DIR" \
+#         --output_path "$SPARSE_DIR"
+
+  # Original version with colmap
+  colmap mapper \
+   --database_path "$SCENES_DIR/$2/database.db" \
+   --image_path    "$IMG_DIR" \
+   --output_path   "$SPARSE_DIR" \
+   --Mapper.num_threads "$THREADS_TO_USE"
+
+  echo "Done. Exporting best model."
+
+  colmap model_converter \
+    --input_path  "$SPARSE_DIR/0" \
+    --output_path "$SPARSE_DIR" \
+    --output_type TXT 
+
+}
+
+NUMBER_OF_VIDEO_FILES="$(ls "$VIDEOS_DIR" | wc -l)"
+
+if [ ! "$NUMBER_OF_VIDEO_FILES" -gt "0" ]; then
+  echo "No video files found."
+  exit 1
+fi
+
+echo "Starting COLMAP on $NUMBER_OF_VIDEO_FILES video file(s)."
+
+FILES="$VIDEOS_DIR/*"
+
+for FILE in $FILES
+do
+#   process_video_file $FILE ${FILE/$VIDEOS_DIR\//}
+  process_video_file "$FILE" "${FILE/$VIDEOS_DIR\//}"
+#   process_video_file "$FILE" "${FILE/$VIDEOS_DIR\//}"
+done
+
+echo "Finished."

@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "COOL I'm here"
-cat /in/input > /out/output
+# cat /in/input > /out/output
 
 # This script was created by:
 # Wolkensteine (https://mastodon.wolkenheim.eu/@Wolkensteine)

@@ -120,6 +120,8 @@ LABEL maintainer="fullstability@gmail.com"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_QPA_PLATFORM=offscreen
 ENV PATH="/usr/local/bin:$PATH"
+# CRITICAL FIX: Add /usr/local/lib to the library search path
+ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
 # --- 1) Install All Dependencies and Latest CMake ---
 RUN apt-get update && \

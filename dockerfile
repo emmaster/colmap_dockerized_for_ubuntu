@@ -98,13 +98,13 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
     # CRITICAL FIX 2/5 (Header Conflict Fix): Block MiniGlog header
-    # *** REVISED PATH: Targetting the main MiniGlog header file (logging.h) instead of the non-existent raw_logging.h. ***
-    # This prevents the redefinition errors (google::INFO, WARNING, etc.).
+    # Targets the main MiniGlog header file (logging.h) to prevent redefinition errors.
     sed -i 's/\#include <glog\/log_severity.h>/ /g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
     
-    # CRITICAL FIX 3/5 (Header/Type Fix & VLOG_IS_ON Fix): 
-    # Inserts necessary headers and type aliases.
-    printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= google::Get  V  Log  L  evel())\n#endif\n' > /tmp/colmap_glog_fixes && \
+    # CRITICAL FIX 3/5 (Header/Type/VLOG_IS_ON Fix): 
+    # Inserts necessary headers and type aliases. FIX: Remove VLOG_IS_ON definition here, 
+    # it causes issues when defined as a macro inside a macro (LOG_IF). We will fix the call site instead.
+    printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
     
@@ -115,9 +115,9 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     # Fix 4b: Insert Operator Counters
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Fix 4c: Define THROW_CHECK macros, now passing a mandatory empty string ""
-    # to the 2-argument RAW_CHECK macro. Also defines THROW_CHECK_NOTNULL.
-    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK(val1 op val2, "") \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n\n#define THROW_CHECK_NOTNULL(ptr) \\\n  (ptr == NULL ? colmap::LogMessageFatal(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))\n\n#define THROW_CHECK_NOTNULL_T(ptr, exception) \\\n  (ptr == NULL ? colmap::LogMessageFatalThrow<exception>(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))' > /tmp/colmap_throw_checks && \
+    # Fix 4c (THROW_CHECK Fix): Redefine THROW_CHECK_OP for correct expansion.
+    # Fix the THROW_CHECK_GT/etc. macro expansion errors.
+    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK((val1) op (val2), "") \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n\n#define THROW_CHECK_NOTNULL(ptr) \\\n  (ptr == NULL ? colmap::LogMessageFatal(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))\n\n#define THROW_CHECK_NOTNULL_T(ptr, exception) \\\n  (ptr == NULL ? colmap::LogMessageFatalThrow<exception>(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))' > /tmp/colmap_throw_checks && \
     sed -i '94,103d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '93 r /tmp/colmap_throw_checks' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_throw_checks && \
@@ -125,6 +125,15 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     # CRITICAL FIX 5/5 (LogMessageFatalThrow type definition)
     # Defines the LogMessageFatalThrow template struct.
     sed -i '92i\template <typename E>\nstruct LogMessageFatalThrow : public google::LogMessageFatal {\n  LogMessageFatalThrow(const char* file, int line) : LogMessageFatal(file, line) {}\n  ~LogMessageFatalThrow() noexcept(false) {\n    throw E(this->str());\n  }\n};\n' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # CRITICAL FIX 6/6 (VLOG_IS_ON Call Site Fix)
+    # The VLOG_IS_ON macro is causing issues inside some COLMAP source files.
+    # Replace the macro usage with a simple check to bypass the internal Glog/MiniGlog issues.
+    # This specifically addresses the errors in bundle_adjustment.cc
+    # The original condition was `options_.print_summary || VLOG_IS_ON(1)`
+    sed -i 's/VLOG_IS_ON(1)/google::GetVLogCommandLine() >= 1/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
+    sed -i 's/VLOG_IS_ON(2)/google::GetVLogCommandLine() >= 2/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
+    sed -i 's/VLOG_IS_ON(3)/google::GetVLogCommandLine() >= 3/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
@@ -139,6 +148,11 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /opt/colmap
 # ---------------------------------------------------------------------
+
+
+
+
+    
 
 
 # --- 5) Build and Install GLOMAP 1.1.0 ---

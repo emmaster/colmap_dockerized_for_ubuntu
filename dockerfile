@@ -122,7 +122,6 @@ ENV QT_QPA_PLATFORM=offscreen
 ENV PATH="/usr/local/bin:$PATH"
 
 # --- 1) Install Build and COLMAP/GLOMAP Dependencies ---
-# Includes dependencies for COLMAP, GLOMAP, and a modern CMake via Kitware
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         # Essential tools
@@ -160,11 +159,21 @@ RUN apt-get update && \
     # Cleanup
     rm -rf /var/lib/apt/lists/*
 
-# --- 2) Build and Install COLMAP 3.12.3 (Library Dependency) ---
-# Note: Ceres solver (required by COLMAP) is assumed to be handled correctly 
-# by the standard dependency install or built separately if needed, 
-# but often the system libs work fine on modern Ubuntu.
+# --- NEW STEP: 2) Build and Install Ceres Solver 2.1.0 with CUDA ---
+RUN CERES_VERSION="2.1.0" && \
+    git clone --branch $CERES_VERSION --depth 1 https://ceres-solver.googlesource.com/ceres-solver /opt/ceres-solver && \
+    cmake -S /opt/ceres-solver -B /opt/ceres-solver/build \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCUDA=ON \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_EXAMPLES=OFF && \
+    cmake --build /opt/ceres-solver/build && \
+    cmake --install /opt/ceres-solver/build && \
+    rm -rf /opt/ceres-solver
 
+# --- 3) Build and Install COLMAP 3.12.3 (Library Dependency) ---
+# COLMAP will now find the Ceres libraries installed in the previous step
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
@@ -178,11 +187,11 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     cmake --install /opt/colmap/build && \
     rm -rf /opt/colmap
 
-# --- 3) Build and Install GLOMAP 1.1.0 ---
+# --- 4) Build and Install GLOMAP 1.1.0 ---
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
 RUN git clone --depth 1 -b v1.1.0 https://github.com/colmap/glomap.git /opt/glomap && \
-    # The GLOMAP build should find the COLMAP libraries installed in the previous step
+    # The GLOMAP build will find COLMAP/Ceres installed previously
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
@@ -193,7 +202,7 @@ RUN git clone --depth 1 -b v1.1.0 https://github.com/colmap/glomap.git /opt/glom
     cmake --install /opt/glomap/build && \
     rm -rf /opt/glomap
 
-# --- 4) Final Execution Setup ---
+# --- 5) Final Execution Setup ---
 COPY ./src /src
 WORKDIR /src
 RUN chmod +x ./action

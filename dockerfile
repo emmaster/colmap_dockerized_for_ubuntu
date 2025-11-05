@@ -91,20 +91,34 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
-    # CRITICAL FIX 1/4 (Cleanup): Remove conflicting original GLOG includes and old operator fix.
+    # CRITICAL FIX 1/5 (Cleanup): Remove conflicting original GLOG includes and old operator fix.
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 2/4 (Consolidated Header/Type Fix): Insert necessary headers and type aliases in one go,
-    # ensuring correct macro definition order for THROW_CHECK.
+    # CRITICAL FIX 2/5 (Consolidated Header/Type Fix): Insert necessary headers and type aliases at line 38.
     sed -i '38i#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 3/4 (Operators): Re-introduce the missing operator check macros (BEFORE they are used by THROW_CHECK_OP)
-    # The insertion point is at the start of the THROW_CHECK section (around line 87).
+    # CRITICAL FIX 3/5 (Operators): Re-introduce operator counter macros (line 87)
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 4/4 (Prediction Macro): Replace the usage with the built-in function.
+    # CRITICAL FIX 4/5 (Macro Punctuation and Symbol Fixes): 
+    # a) Wrap comparison operators in THROW_CHECK_OP macro calls to prevent C preprocessor error (>)
+    # b) Remove colmap::LogMessageFatalThrowDefault and rely on standard LOG_IF(FATAL)
+    # c) Remove custom VLOG_IS_ON definitions and rely on standard glog
+    # d) Replace GOOGLE_PREDICT macro
+    sed -i 's/THROW_CHECK_OP(_EQ, ==, val1, val2)/THROW_CHECK_OP(_EQ, (==), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/THROW_CHECK_OP(_NE, !=, val1, val2)/THROW_CHECK_OP(_NE, (!=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/THROW_CHECK_OP(_LE, <=, val1, val2)/THROW_CHECK_OP(_LE, (<=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/THROW_CHECK_OP(_LT, <, val1, val2)/THROW_CHECK_OP(_LT, ( < ), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/THROW_CHECK_OP(_GE, >=, val1, val2)/THROW_CHECK_OP(_GE, (>=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/THROW_CHECK_OP(_GT, >, val1, val2)/THROW_CHECK_OP(_GT, ( > ), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # Simplify the core THROW_CHECK macro to avoid the missing colmap::LogMessageFatalThrowDefault
+    sed -i 's/LOG_IF(FATAL_THROW, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition)))/LOG_IF(FATAL, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition)))/g' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i 's/CHECK_OP_LOG(name, op, val1, val2, colmap::LogMessageFatalThrowDefault)/CHECK_OP_LOG(name, op, val1, val2, ::google::LogMessageFatal)/g' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # CRITICAL FIX 5/5 (Prediction Macro): Replace the usage with the built-in function (The last fix we had, but applied after the check above).
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(__builtin_expect(!(x), 0))/g' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \
@@ -119,8 +133,6 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     cmake --install /opt/colmap/build && \
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /opt/colmap
-
-# ---------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
 

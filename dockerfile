@@ -72,7 +72,7 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
     cmake --build /opt/faiss/build --target install && \
     rm -rf /opt/faiss && ldconfig
 
-# --- 4) COLMAP 3.12.3 (headless, CUDA) ---
+# --- 4) COLMAP 3.12.3 (headless, CUDA, static libs) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
@@ -81,7 +81,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
       -DCUDA_ENABLED=ON \
       -DOPENGL_ENABLED=OFF \
       -DGUI_ENABLED=OFF \
-      -DBUILD_SHARED_LIBS=ON \
+      -DBUILD_SHARED_LIBS=OFF \
       -DCGAL_ENABLED=ON && \
     cmake --build /opt/colmap/build && \
     cmake --install /opt/colmap/build && \

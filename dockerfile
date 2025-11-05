@@ -91,34 +91,44 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
-    # CRITICAL FIX 1/5 (Cleanup): Remove conflicting original GLOG includes and old operator fix.
+    # CRITICAL FIX 1/6 (Cleanup): Remove all conflicting and old fixes
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 2/5 (Consolidated Header/Type Fix): Insert necessary headers and type aliases at line 38.
+    # CRITICAL FIX 2/6 (Consolidated Header/Type Fix): Insert necessary headers and type aliases at line 38.
+    # We must also correct the LogMessageFatal call to the non-namespaced version.
     sed -i '38i#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 3/5 (Operators): Re-introduce operator counter macros (line 87)
+    # CRITICAL FIX 3/6 (Operators): Re-introduce operator counter macros (line 87)
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 4/5 (Macro Punctuation and Symbol Fixes): 
-    # a) Wrap comparison operators in THROW_CHECK_OP macro calls to prevent C preprocessor error (>)
-    # b) Remove colmap::LogMessageFatalThrowDefault and rely on standard LOG_IF(FATAL)
-    # c) Remove custom VLOG_IS_ON definitions and rely on standard glog
-    # d) Replace GOOGLE_PREDICT macro
-    sed -i 's/THROW_CHECK_OP(_EQ, ==, val1, val2)/THROW_CHECK_OP(_EQ, (==), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/THROW_CHECK_OP(_NE, !=, val1, val2)/THROW_CHECK_OP(_NE, (!=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/THROW_CHECK_OP(_LE, <=, val1, val2)/THROW_CHECK_OP(_LE, (<=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/THROW_CHECK_OP(_LT, <, val1, val2)/THROW_CHECK_OP(_LT, ( < ), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/THROW_CHECK_OP(_GE, >=, val1, val2)/THROW_CHECK_OP(_GE, (>=), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/THROW_CHECK_OP(_GT, >, val1, val2)/THROW_CHECK_OP(_GT, ( > ), val1, val2)/g' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 4/6 (LogMessageFatal Scope): The function is often globally scoped, not in ::google.
+    sed -i 's/::google::LogMessageFatal/LogMessageFatal/g' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Simplify the core THROW_CHECK macro to avoid the missing colmap::LogMessageFatalThrowDefault
-    sed -i 's/LOG_IF(FATAL_THROW, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition)))/LOG_IF(FATAL, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition)))/g' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/CHECK_OP_LOG(name, op, val1, val2, colmap::LogMessageFatalThrowDefault)/CHECK_OP_LOG(name, op, val1, val2, ::google::LogMessageFatal)/g' /opt/colmap/src/colmap/util/logging.h && \
-    
-    # CRITICAL FIX 5/5 (Prediction Macro): Replace the usage with the built-in function (The last fix we had, but applied after the check above).
+    # CRITICAL FIX 5/6 (CHECK_OP_LOG / Operator Punctuation Fix): 
+    # This completely replaces the THROW_CHECK_OP macro definition to fix the 'CHECK_OP_LOG' error 
+    # and the operator punctuation error simultaneously. It converts all operator checks 
+    # to use the standard glog CHECK_OP macros which are defined in the included headers.
+    # NOTE: This is a complex sed command to replace lines 94-103 of logging.h
+    # Based on a typical COLMAP logging.h (3.12), lines 94-103 contain the THROW_CHECK_OP macros.
+    sed -i '94,103c\
+#define THROW_CHECK_OP(op, name, val1, val2) \
+  RAW_CHECK_OP(op, name, val1, val2, LogMessageFatal) \
+\
+#define THROW_CHECK(condition) \
+  LOG_IF(FATAL, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition))) << "Check failed: " #condition << ": "\
+\
+#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\
+#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\
+#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\
+#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\
+#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\
+#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\
+' /opt/colmap/src/colmap/util/logging.h && \
+
+    # CRITICAL FIX 6/6 (Prediction Macro): Replace the usage with the built-in function.
+    # We must run this as a final step because of the way the previous sed replacement works.
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(__builtin_expect(!(x), 0))/g' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \
@@ -135,7 +145,6 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     rm -rf /opt/colmap
 
 # ---------------------------------------------------------------------
-
 # ---------------------------------------------------------------------
 
 # --- 5) Build and Install GLOMAP 1.1.0 ---

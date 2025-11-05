@@ -220,7 +220,9 @@ RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
 
 # --- 5) Configure Runtime Linker (CRITICAL FIX) ---
 # Create a config file to explicitly search /usr/local/lib, and then update the cache.
-RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/colmap.conf && ldconfig
+RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/colmap.conf && \
+    ln -sf /usr/lib/x86_64-linux-gnu/libfaiss.so /usr/local/lib/libfaiss.so && \
+    ldconfig
 
 
 # --- 6) Final Execution Setup ---

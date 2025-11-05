@@ -91,25 +91,20 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
-    # CRITICAL FIX 1/5 (Cleanup): Remove all conflicting and old fixes
+    # CRITICAL FIX 1/4 (Cleanup): Remove conflicting original GLOG includes and old operator fix.
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 2/5 (Header Order): Move necessary GLOG/Ceres-MiniGlog includes to the TOP (line 38)
-    # This ensures LOG_IF is defined before THROW_CHECK tries to use it.
-    sed -i '38i#include <stdint.h>\n#include "glog\/logging.h"\n#include <glog\/raw_logging.h>' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 2/4 (Consolidated Header/Type Fix): Insert necessary headers and type aliases in one go,
+    # ensuring correct macro definition order for THROW_CHECK.
+    sed -i '38i#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 3/5 (Types): Define missing int32/int64 types for MiniGlog compatibility
-    # Note: This is inside the google namespace, which is now correctly introduced in the main header.
-    sed -i '42inamespace google { using int32 = int32_t; using int64 = int64_t; }' /opt/colmap/src/colmap/util/logging.h && \
-    
-    # CRITICAL FIX 4/5 (Operators): Re-introduce the missing operator check macros
-    # These are needed for THROW_CHECK_OP which relies on CHECK_OP_LOG from glog/raw_logging.h
+    # CRITICAL FIX 3/4 (Operators): Re-introduce the missing operator check macros (BEFORE they are used by THROW_CHECK_OP)
+    # The insertion point is at the start of the THROW_CHECK section (around line 87).
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 5/5 (Prediction Macro): Fix the definition of the prediction macro.
-    # We must replace the usage in the file with a version that does not use the Glog symbol.
+    # CRITICAL FIX 4/4 (Prediction Macro): Replace the usage with the built-in function.
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(__builtin_expect(!(x), 0))/g' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \

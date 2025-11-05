@@ -101,10 +101,10 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     # Targets the main MiniGlog header file (logging.h) to prevent redefinition errors.
     sed -i 's/\#include <glog\/log_severity.h>/ /g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
     
-    # CRITICAL FIX 3/5 (Header/Type/VLOG_IS_ON Fix): 
-    # Inserts necessary headers and type aliases. FIX: Remove VLOG_IS_ON definition here, 
-    # it causes issues when defined as a macro inside a macro (LOG_IF). We will fix the call site instead.
-    printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n' > /tmp/colmap_glog_fixes && \
+    # CRITICAL FIX 3/5 (Header/Type Fix): 
+    # Inserts necessary standard glog headers and type aliases.
+    # Note: We are explicitly including the glog headers that COLMAP's custom logging system relies on.
+    printf '#include <stdint.h>\n#include <glog/logging.h>\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
     
@@ -152,7 +152,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
 
 
 
-    
+
 
 
 # --- 5) Build and Install GLOMAP 1.1.0 ---

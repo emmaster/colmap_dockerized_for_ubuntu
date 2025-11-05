@@ -92,35 +92,40 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
-    # CRITICAL FIX 1/4 (Cleanup): Remove all conflicting and old fixes
+    # CRITICAL FIX 1/5 (Cleanup): Remove all conflicting and old fixes
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 2/4 (Header/Type Fix & VLOG_IS_ON Fix): 
-    # Inserts necessary headers, type aliases, and a simple VLOG_IS_ON definition to prevent conflicts.
-    # NOTE: The strange spacing around 'Get V Log L evel()' is a common hack to prevent VLOG conflicts.
+    # CRITICAL FIX 2/5 (Header Conflict Fix): Block MiniGlog header
+    # This specifically targets the redefinition errors (google::INFO, WARNING, etc.)
+    # by removing the problematic include from the MiniGlog header (via logging.h)
+    sed -i 's/#include <glog\/logging.h>//g' /usr/local/include/ceres/internal/miniglog/glog/raw_logging.h && \
+    
+    # CRITICAL FIX 3/5 (Header/Type Fix & VLOG_IS_ON Fix): 
+    # Inserts necessary headers and type aliases. The redefinition error fix above might
+    # make the VLOG_IS_ON definition in 4/5 unnecessary, but we keep it for robustness.
     printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= google::Get  V  Log  L  evel())\n#endif\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
     
-    # CRITICAL FIX 3/4 (Macro Definitions - Direct Symbol Fixes)
-    # Fix 3a: Replace '::google::LogMessageFatal' with global 'LogMessageFatal'
+    # CRITICAL FIX 4/5 (Macro Definitions - RAW_CHECK(condition, message) Fix)
+    # Fix 4a: Replace '::google::LogMessageFatal' with global 'LogMessageFatal'
     sed -i 's/::google::LogMessageFatal/LogMessageFatal/g' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Fix 3b: Insert Operator Counters
+    # Fix 4b: Insert Operator Counters
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Fix 3c: Define THROW_CHECK macros using the embedded __builtin_expect for prediction,
-    # and using RAW_CHECK (which exists) instead of RAW_CHECK_OP (which is missing).
-    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK(val1 op val2) \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n' > /tmp/colmap_throw_checks && \
+    # Fix 4c: Define THROW_CHECK macros, now passing a mandatory empty string ""
+    # to the 2-argument RAW_CHECK macro. Also defines THROW_CHECK_NOTNULL.
+    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK(val1 op val2, "") \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n\n#define THROW_CHECK_NOTNULL(ptr) \\\n  (ptr == NULL ? colmap::LogMessageFatal(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))\n\n#define THROW_CHECK_NOTNULL_T(ptr, exception) \\\n  (ptr == NULL ? colmap::LogMessageFatalThrow<exception>(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))' > /tmp/colmap_throw_checks && \
     sed -i '94,103d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '93 r /tmp/colmap_throw_checks' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_throw_checks && \
     
-    # CRITICAL FIX 4/4 (Prediction Macro Cleanup): Remove the old symbol reference.
-    # This must be done AFTER the insert above to clean up any remaining references.
-    sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(__builtin_expect(!(x), 0))/g' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 5/5 (LogMessageFatalThrow type definition)
+    # The LogMessageFatalThrow template type is still missing. Define it as a struct.
+    sed -i '92i\template <typename E>\nstruct LogMessageFatalThrow : public google::LogMessageFatal {\n  LogMessageFatalThrow(const char* file, int line) : LogMessageFatal(file, line) {}\n  ~LogMessageFatalThrow() noexcept(false) {\n    throw E(this->str());\n  }\n};\n' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \

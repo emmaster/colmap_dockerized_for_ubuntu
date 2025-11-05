@@ -97,7 +97,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
-    sed -i 's/\#include <glog\/log_severity.h>/ /g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
+    sed -i 's|\#include <glog/log_severity.h>| |g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
     printf '#include <stdint.h>\\n#include "glog/logging.h"\\n#include <glog/raw_logging.h>\\n\\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\\n\\n#ifndef VLOG_IS_ON\\n#define VLOG_IS_ON(verboselevel) (verboselevel <= 100)\\n#endif\\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \

@@ -98,13 +98,12 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
     # CRITICAL FIX 2/5 (Header Conflict Fix): Block MiniGlog header
-    # This specifically targets the redefinition errors (google::INFO, WARNING, etc.)
-    # by removing the problematic include from the MiniGlog header (via logging.h)
-    sed -i 's/#include <glog\/logging.h>//g' /usr/local/include/ceres/internal/miniglog/glog/raw_logging.h && \
+    # *** REVISED PATH: Targetting the main MiniGlog header file (logging.h) instead of the non-existent raw_logging.h. ***
+    # This prevents the redefinition errors (google::INFO, WARNING, etc.).
+    sed -i 's/\#include <glog\/log_severity.h>/ /g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
     
     # CRITICAL FIX 3/5 (Header/Type Fix & VLOG_IS_ON Fix): 
-    # Inserts necessary headers and type aliases. The redefinition error fix above might
-    # make the VLOG_IS_ON definition in 4/5 unnecessary, but we keep it for robustness.
+    # Inserts necessary headers and type aliases.
     printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= google::Get  V  Log  L  evel())\n#endif\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
@@ -124,7 +123,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     rm /tmp/colmap_throw_checks && \
     
     # CRITICAL FIX 5/5 (LogMessageFatalThrow type definition)
-    # The LogMessageFatalThrow template type is still missing. Define it as a struct.
+    # Defines the LogMessageFatalThrow template struct.
     sed -i '92i\template <typename E>\nstruct LogMessageFatalThrow : public google::LogMessageFatal {\n  LogMessageFatalThrow(const char* file, int line) : LogMessageFatal(file, line) {}\n  ~LogMessageFatalThrow() noexcept(false) {\n    throw E(this->str());\n  }\n};\n' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \

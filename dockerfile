@@ -111,7 +111,7 @@
 
 
 
-### Final working version with COLMAP and GLOMAP, CUDA enabled
+### THIS BUILT WORKS:
 
 # Use a standard CUDA base image for building
 FROM nvidia/cuda:12.2.2-devel-ubuntu22.04

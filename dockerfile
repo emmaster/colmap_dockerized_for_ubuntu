@@ -10,6 +10,7 @@ ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 # Optional: set your GPU arch for smaller/faster CUDA builds (86=RTX30xx, 89=RTX40xx)
 ARG CUDA_ARCH=89
 ENV CMAKE_BUILD_PARALLEL_LEVEL=8
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
 
 # --- 1) System deps + latest CMake (no GUI/GL since headless) ---
 RUN apt-get update && \
@@ -41,13 +42,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # --- 2) Ceres 2.1.0 (CUDA + SuiteSparse + glog, no miniglog) ---
-RUN CERES_VERSION="2.1.0" && \
+RUN CERES_VERSION="2.2.0" && \
     git clone --branch "$CERES_VERSION" --depth 1 \
       https://ceres-solver.googlesource.com/ceres-solver /opt/ceres-solver && \
     cmake -S /opt/ceres-solver -B /opt/ceres-solver/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH} \
+      -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
       -DCERES_USE_CUDA=ON \
       -DMINIGLOG=OFF \
       -DSUITESPARSE=ON \

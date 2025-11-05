@@ -88,7 +88,7 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 
 # ---------------------------------------------------------------------
 
-Dockerfile
+
 # ---------------------------------------------------------------------
 
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---

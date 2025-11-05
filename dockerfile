@@ -153,7 +153,8 @@ RUN apt-get update && \
         libgtest-dev \
         libflann-dev \
         libsqlite3-dev \
-        libfreeimage-dev && \
+        libfreeimage-dev \
+        libfaiss-dev && \
     
     # --- Install latest CMake (Required) ---
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/kitware.gpg && \

@@ -90,11 +90,13 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
-    # CRITICAL FIX 1/3: Add primary glog include
+    # CRITICAL FIX 1/4: Add primary glog include
     sed -i '38i#include <glog/logging.h>' /opt/colmap/src/colmap/util/logging.h && \
-    # CRITICAL FIX 2/3: Add helper logging include for CHECK_OP_LOG/operators
+    # CRITICAL FIX 2/4: Add helper logging include for CHECK_OP_LOG/operators
     sed -i '38i#include <glog/raw_logging.h>' /opt/colmap/src/colmap/util/logging.h && \
-    # CRITICAL FIX 3/3: Define missing prediction macro
+    # CRITICAL FIX 3/4: Define missing operator check symbols (_EQ, _GT, etc.) for newer glog
+    sed -i '90i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 4/4: Define missing prediction macro (your existing fix)
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(x)/g' /opt/colmap/src/colmap/util/logging.h && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
@@ -108,6 +110,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     cmake --install /opt/colmap/build && \
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /opt/colmap
+
 
 # ---------------------------------------------------------------------
 

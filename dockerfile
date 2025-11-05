@@ -90,14 +90,23 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
-    # CRITICAL FIX 1/4: Add primary glog include
-    sed -i '38i#include <glog/logging.h>' /opt/colmap/src/colmap/util/logging.h && \
-    # CRITICAL FIX 2/4: Add helper logging include for CHECK_OP_LOG/operators
-    sed -i '38i#include <glog/raw_logging.h>' /opt/colmap/src/colmap/util/logging.h && \
-    # CRITICAL FIX 3/4: Define missing operator check symbols (_EQ, _GT, etc.) for newer glog
-    sed -i '90i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
-    # CRITICAL FIX 4/4: Define missing prediction macro (your existing fix)
+    # CRITICAL FIX 1/4 (Cleanup): Remove all original fix attempts for glog/raw_logging conflicts
+    # We will replace them with a single correct header inclusion.
+    sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # CRITICAL FIX 2/4: Replace the conflicting glog/logging.h include with the correct miniglog include
+    # We rely on Ceres's miniglog installation to provide the necessary symbols.
+    sed -i 's/#include <glog\/logging.h>/#include "glog\/logging.h"/' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # CRITICAL FIX 3/4 (Fix absolute_pose.cc and others): Define the missing int32/int64 types
+    # This addresses 'error: 'int32' in namespace 'google' does not name a type' by adding types
+    sed -i '38i#include <stdint.h>\nnamespace google { using int32 = int32_t; using int64 = int64_t; }' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # CRITICAL FIX 4/4: Define missing prediction macro (Your existing fix)
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(x)/g' /opt/colmap/src/colmap/util/logging.h && \
+    
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
@@ -111,6 +120,7 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /opt/colmap
 
+# ---------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
 

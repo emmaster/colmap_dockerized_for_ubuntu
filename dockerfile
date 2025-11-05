@@ -93,8 +93,10 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
-    # CRITICAL FIX: Replace logging.h to fix Glog macro visibility issues
-    sed -i '38i#include <glog/raw_logging.h>' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 1/2: Add missing glog include to resolve build errors
+    sed -i '38i#include <glog/logging.h>' /opt/colmap/src/colmap/util/logging.h && \
+    # CRITICAL FIX 2/2: Define missing macro that is causing errors on line 83 of logging.h
+    sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(x)/g' /opt/colmap/src/colmap/util/logging.h && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \

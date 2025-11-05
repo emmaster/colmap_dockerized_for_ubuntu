@@ -16,6 +16,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg bash lsb-release git wget ca-certificates gpg \
         build-essential ninja-build pkg-config \
+        # Boost (needed for COLMAP)
+        libboost-all-dev \
         # math / linear algebra / sparse
         libatlas-base-dev libsuitesparse-dev libmetis-dev \
         # logging / flags

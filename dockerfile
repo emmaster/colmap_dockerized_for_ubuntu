@@ -197,7 +197,8 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
 # --- 4) Build and Install GLOMAP 1.1.0 ---
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
-RUN git clone --depth 1 -b v1.1.0 https://github.com/colmap/glomap.git /opt/glomap && \
+RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
+    # The GLOMAP build will find COLMAP/Ceres installed previously
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \

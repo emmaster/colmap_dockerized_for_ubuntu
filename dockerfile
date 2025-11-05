@@ -148,7 +148,7 @@ RUN apt-get update && \
         libeigen3-dev \
         libmetis-dev \
         libgtest-dev \
-        libflann-dev && \
+        libflann-dev \
         libsqlite3-dev && \
     
     # --- Install latest CMake (Required) ---

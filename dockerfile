@@ -180,9 +180,23 @@ RUN CERES_VERSION="2.1.0" && \
     cmake --install /opt/ceres-solver/build && \
     rm -rf /opt/ceres-solver
 
+# --- NEW STEP: 3) Build and Install FAISS with CUDA ---
+RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss && \
+    cmake -S /opt/faiss -B /opt/faiss/build \
+      -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=ON \
+      -DFAISS_ENABLE_GPU=ON \
+      -DFAISS_ENABLE_PYTHON=OFF \
+      -DFAISS_ENABLE_C_API=ON && \
+    cmake --build /opt/faiss/build --target install && \
+    rm -rf /opt/faiss
+
+
 # ---------------------------------------------------------------------
 
-# --- 3) Build and Install COLMAP 3.12.3 (Library Dependency) ---
+# --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
+# This is the original Step 3. COLMAP will now find the custom-built FAISS.
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
@@ -194,19 +208,16 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
       -DCGAL_ENABLED=ON && \
     cmake --build /opt/colmap/build && \
     cmake --install /opt/colmap/build && \
-    
-    # CRITICAL FIX: Explicitly find and copy the shared library
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
-    
     rm -rf /opt/colmap
 
 # ---------------------------------------------------------------------
 
-# --- 4) Build and Install GLOMAP 1.1.0 ---
+# --- 5) Build and Install GLOMAP 1.1.0 ---
+# This is the original Step 4.
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
 RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
-    # The GLOMAP build will find COLMAP/Ceres installed previously
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
@@ -218,14 +229,12 @@ RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
 
 # ---------------------------------------------------------------------
 
-# --- 5) Configure Runtime Linker (CRITICAL FIX) ---
-# Create a config file to explicitly search /usr/local/lib, and then update the cache.
-RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/colmap.conf && \
-    ln -sf /usr/lib/x86_64-linux-gnu/libfaiss.so /usr/local/lib/libfaiss.so && \
-    ldconfig
+# --- 6) Configure Runtime Linker (CRITICAL FIX) ---
+# This is the original Step 5. Remove the obsolete symlink command.
+RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/colmap.conf && ldconfig
 
 
-# --- 6) Final Execution Setup ---
+# --- 7) Final Execution Setup ---
 COPY ./src /src
 WORKDIR /src
 RUN chmod +x ./action

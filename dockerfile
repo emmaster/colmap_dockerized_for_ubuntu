@@ -30,6 +30,7 @@ RUN apt-get update && \
         libopencv-dev \
         # >>> add these for FindOpenGL <<<
         libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
+        libglew-dev \
     && \
     # Kitware CMake
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \

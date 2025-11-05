@@ -16,9 +16,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg bash lsb-release git wget ca-certificates gpg \
         build-essential ninja-build pkg-config \
-        # Boost (needed for COLMAP)
+        # Boost
         libboost-all-dev \
-        # math / linear algebra / sparse
+        # math / sparse
         libatlas-base-dev libsuitesparse-dev libmetis-dev \
         # logging / flags
         libgflags-dev libgoogle-glog-dev \
@@ -26,8 +26,11 @@ RUN apt-get update && \
         libeigen3-dev libflann-dev libsqlite3-dev libcgal-dev \
         # image I/O
         libfreeimage-dev \
-        # OpenCV headers (optional but useful)
-        libopencv-dev && \
+        # OpenCV (optional but useful)
+        libopencv-dev \
+        # >>> add these for FindOpenGL <<<
+        libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
+    && \
     # Kitware CMake
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
       | gpg --dearmor -o /etc/apt/trusted.gpg.d/kitware.gpg && \

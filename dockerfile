@@ -88,7 +88,8 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     rm -rf /opt/colmap && ldconfig
 
 # --- 5) GLOMAP v1.1.0 (headless, CUDA) ---
-RUN git clone --depth 1 -b v1.1.0 https://github.com/colmap/glomap.git /opt/glomap && \
+# --- 5) GLOMAP (headless, CUDA) ---
+RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \

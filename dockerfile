@@ -174,6 +174,7 @@ RUN CERES_VERSION="2.1.0" && \
         -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCUDA=ON \
+        -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
         -DBUILD_TESTING=OFF \
         -DBUILD_EXAMPLES=OFF && \
     cmake --build /opt/ceres-solver/build && \

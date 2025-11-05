@@ -193,6 +193,10 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
       -DCGAL_ENABLED=ON && \
     cmake --build /opt/colmap/build && \
     cmake --install /opt/colmap/build && \
+    
+    # CRITICAL FIX: Explicitly find and copy the shared library
+    find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
+    
     rm -rf /opt/colmap
 
 # ---------------------------------------------------------------------

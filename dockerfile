@@ -149,6 +149,7 @@ RUN apt-get update && \
         libmetis-dev \
         libgtest-dev \
         libflann-dev && \
+        libsqlite3-dev && \
     
     # --- Install latest CMake (Required) ---
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/kitware.gpg && \

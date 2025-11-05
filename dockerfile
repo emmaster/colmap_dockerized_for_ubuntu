@@ -210,7 +210,11 @@ RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
 
 # ---------------------------------------------------------------------
 
-# --- 5) Final Execution Setup ---
+# --- NEW STEP: 5) Configure Runtime Linker ---
+# This ensures that all installed .so files (including libPoseLib.so) are found by COLMAP/GLOMAP
+RUN ldconfig
+
+# --- 6) Final Execution Setup ---
 COPY ./src /src
 WORKDIR /src
 RUN chmod +x ./action

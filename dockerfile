@@ -121,7 +121,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_QPA_PLATFORM=offscreen
 ENV PATH="/usr/local/bin:$PATH"
 
-# --- 1) Install Build and COLMAP/GLOMAP Dependencies ---
+# --- 1) Install All Dependencies and Latest CMake ---
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         # Essential tools
@@ -149,7 +149,8 @@ RUN apt-get update && \
         libmetis-dev \
         libgtest-dev \
         libflann-dev \
-        libsqlite3-dev && \
+        libsqlite3-dev \
+        libfreeimage-dev && \
     
     # --- Install latest CMake (Required) ---
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/kitware.gpg && \
@@ -157,10 +158,12 @@ RUN apt-get update && \
     apt-get update && \
     apt-get install -y --no-install-recommends cmake && \
     
-    # Cleanup
+    # Final cleanup of apt lists
     rm -rf /var/lib/apt/lists/*
 
-# --- NEW STEP: 2) Build and Install Ceres Solver 2.1.0 with CUDA ---
+# ---------------------------------------------------------------------
+
+# --- 2) Build and Install Ceres Solver 2.1.0 with CUDA ---
 RUN CERES_VERSION="2.1.0" && \
     git clone --branch $CERES_VERSION --depth 1 https://ceres-solver.googlesource.com/ceres-solver /opt/ceres-solver && \
     cmake -S /opt/ceres-solver -B /opt/ceres-solver/build \
@@ -173,35 +176,38 @@ RUN CERES_VERSION="2.1.0" && \
     cmake --install /opt/ceres-solver/build && \
     rm -rf /opt/ceres-solver
 
+# ---------------------------------------------------------------------
+
 # --- 3) Build and Install COLMAP 3.12.3 (Library Dependency) ---
-# COLMAP will now find the Ceres libraries installed in the previous step
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     cmake -S /opt/colmap -B /opt/colmap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCUDA_ENABLED=ON \
       -DOPENGL_ENABLED=OFF \
-      -DBUILD_GUI=OFF \
+      -DGUI_ENABLED=OFF \
       -DBUILD_SHARED_LIBS=ON \
       -DCGAL_ENABLED=ON && \
     cmake --build /opt/colmap/build && \
     cmake --install /opt/colmap/build && \
     rm -rf /opt/colmap
 
+# ---------------------------------------------------------------------
+
 # --- 4) Build and Install GLOMAP 1.1.0 ---
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
 RUN git clone --depth 1 -b v1.1.0 https://github.com/colmap/glomap.git /opt/glomap && \
-    # The GLOMAP build will find COLMAP/Ceres installed previously
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCUDA_ENABLED=ON \
-      -DOPENGL_ENABLED=OFF \
-      -DBUILD_GUI=OFF && \
+      -DOPENGL_ENABLED=OFF && \
     cmake --build /opt/glomap/build && \
     cmake --install /opt/glomap/build && \
     rm -rf /opt/glomap
+
+# ---------------------------------------------------------------------
 
 # --- 5) Final Execution Setup ---
 COPY ./src /src

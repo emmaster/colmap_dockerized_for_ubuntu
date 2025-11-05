@@ -56,11 +56,11 @@ LABEL maintainer="fullstability@gmail.com"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_QPA_PLATFORM=offscreen
 
-# --- 1) Consolidate Dependency Installation and CMake Upgrade ---
-# Many dependencies are likely already present in the COLMAP base image, 
-# but we install the rest for GLOMAP and upgrade CMake in one layer.
+# --- 1) Consolidated Dependency Installation and CMake Upgrade ---
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        # CRITICAL FIX: Install lsb-release so $(lsb_release -cs) works
+        lsb-release \
         # Essential tools and GLOMAP-specific dependencies
         ffmpeg \
         bash \
@@ -78,10 +78,10 @@ RUN apt-get update && \
         libatlas-base-dev \
         libsuitesparse-dev && \
     
-    # --- CMake Upgrade (Required for latest COLMAP/GLOMAP features) ---
+    # --- CMake Upgrade (Kitware Repo Setup) ---
     # Add Kitware repository key
     wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/kitware.gpg && \
-    # Add the Kitware repository for Ubuntu 22.04
+    # Add the Kitware repository (lsb_release now works here)
     echo "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/kitware.list && \
     
     # Install latest CMake and perform final cleanup
@@ -89,25 +89,18 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends cmake && \
     rm -rf /var/lib/apt/lists/*
     
-# --- 2) Build and Install GLOMAP (Utilizing CUDA Base) ---
-
-# Set minimal parallelism to avoid out-of-memory errors on small builders
+# --- 2) Build and Install GLOMAP ---
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 
+# This second block should remain the same and will run after the dependencies are fixed
 RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
-    
-    # Use -DCUDA_ENABLED=ON to utilize the CUDA libraries present in the base image.
-    # We keep -DOPENGL_ENABLED=OFF since it's a headless server.
     cmake -S /opt/glomap -B /opt/glomap/build \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCUDA_ENABLED=ON \
       -DOPENGL_ENABLED=OFF && \
-      
     cmake --build /opt/glomap/build && \
     cmake --install /opt/glomap/build && \
-    
-    # Cleanup build files to reduce final image size
     rm -rf /opt/glomap
 
 # --- 3) Final Execution Setup ---

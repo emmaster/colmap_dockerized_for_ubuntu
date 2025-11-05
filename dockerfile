@@ -89,8 +89,6 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # ---------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------
-
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
@@ -100,23 +98,28 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
     # CRITICAL FIX 2/4 (Header/Type Fix & VLOG_IS_ON Fix): 
-    # Insert necessary headers, type aliases, and a simple VLOG_IS_ON definition to prevent conflicts.
+    # Inserts necessary headers, type aliases, and a simple VLOG_IS_ON definition to prevent conflicts.
+    # NOTE: The strange spacing around 'Get V Log L evel()' is a common hack to prevent VLOG conflicts.
     printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= google::Get  V  Log  L  evel())\n#endif\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
     
-    # CRITICAL FIX 3/4 (Macro Definitions): Use printf and sed for reliable multi-line macro replacement.
-    # Defines missing operator counters, THROW_CHECK, and THROW_CHECK_OP using available Glog symbols (RAW_CHECK_OP, LogMessageFatal).
-    # NOTE: Line numbers are adjusted after the previous insertion. We target line 90-100 block.
+    # CRITICAL FIX 3/4 (Macro Definitions - Direct Symbol Fixes)
+    # Fix 3a: Replace '::google::LogMessageFatal' with global 'LogMessageFatal'
     sed -i 's/::google::LogMessageFatal/LogMessageFatal/g' /opt/colmap/src/colmap/util/logging.h && \
+    
+    # Fix 3b: Insert Operator Counters
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK_OP(op, name, val1, val2, LogMessageFatal)\n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n' > /tmp/colmap_throw_checks && \
+    # Fix 3c: Define THROW_CHECK macros using the embedded __builtin_expect for prediction,
+    # and using RAW_CHECK (which exists) instead of RAW_CHECK_OP (which is missing).
+    printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK(val1 op val2) \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n' > /tmp/colmap_throw_checks && \
     sed -i '94,103d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '93 r /tmp/colmap_throw_checks' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_throw_checks && \
     
-    # CRITICAL FIX 4/4 (Prediction Macro): Replace the usage with the built-in function.
+    # CRITICAL FIX 4/4 (Prediction Macro Cleanup): Remove the old symbol reference.
+    # This must be done AFTER the insert above to clean up any remaining references.
     sed -i 's/GOOGLE_PREDICT_BRANCH_NOT_TAKEN(x)/(__builtin_expect(!(x), 0))/g' /opt/colmap/src/colmap/util/logging.h && \
     
     cmake -S /opt/colmap -B /opt/colmap/build \

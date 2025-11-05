@@ -120,6 +120,7 @@ LABEL maintainer="fullstability@gmail.com"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_QPA_PLATFORM=offscreen
 ENV PATH="/usr/local/bin:$PATH"
+
 # CRITICAL FIX: Add /usr/local/lib to the library search path
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
@@ -212,9 +213,10 @@ RUN git clone --depth 1 https://github.com/colmap/glomap.git /opt/glomap && \
 
 # ---------------------------------------------------------------------
 
-# --- NEW STEP: 5) Configure Runtime Linker ---
-# This ensures that all installed .so files (including libPoseLib.so) are found by COLMAP/GLOMAP
-RUN ldconfig
+# --- 5) Configure Runtime Linker (CRITICAL FIX) ---
+# Create a config file to explicitly search /usr/local/lib, and then update the cache.
+RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/colmap.conf && ldconfig
+
 
 # --- 6) Final Execution Setup ---
 COPY ./src /src

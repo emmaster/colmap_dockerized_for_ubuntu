@@ -95,54 +95,43 @@ RUN git clone --depth 1 https://github.com/facebookresearch/faiss.git /opt/faiss
 # --- 4) Build and Install COLMAP 3.12.3 (Library Dependency) ---
 RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colmap && \
     
-    # CRITICAL FIX 1/5 (Cleanup): Remove all conflicting and old fixes
+    # CRITICAL FIX 1/7 (Cleanup): Remove all conflicting and old fixes
     sed -i '/#include <glog\/logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#include <glog\/raw_logging.h>/d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/#define _EQ __COUNTER__/d' /opt/colmap/src/colmap/util/logging.h && \
     
-    # CRITICAL FIX 2/5 (Header Conflict Fix): Block MiniGlog header
-    # Targets the main MiniGlog header file (logging.h) to prevent redefinition errors.
+    # CRITICAL FIX 2/7 (Header Conflict Fix): Block MiniGlog header
     sed -i 's/\#include <glog\/log_severity.h>/ /g' /usr/local/include/ceres/internal/miniglog/glog/logging.h && \
     
-    # CRITICAL FIX 3/5 (Header/Type/VLOG_IS_ON Fix) - REDUX: 
-    # Inserts necessary standard glog headers, type aliases, and a simple VLOG_IS_ON macro.
-    # FIX: Move type aliases to be immediately visible to Glog headers.
-    printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= google::COUNTER_TO_VLOG_IS_ON_VARIABLE)\n#endif\n' > /tmp/colmap_glog_fixes && \
-    # Insert at line 38 (just before the namespace colmap)
+    # CRITICAL FIX 3/7 (Header/Type/VLOG_IS_ON Fix) - FINAL
+    # Use the simplest possible VLOG_IS_ON macro to bypass internal Glog errors.
+    printf '#include <stdint.h>\n#include "glog/logging.h"\n#include <glog/raw_logging.h>\n\nnamespace google { using int32 = int32_t; using int64 = int64_t; }\n\n#ifndef VLOG_IS_ON\n#define VLOG_IS_ON(verboselevel) (verboselevel <= 100)\n#endif\n' > /tmp/colmap_glog_fixes && \
     sed -i '38 r /tmp/colmap_glog_fixes' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_glog_fixes && \
     
-    # CRITICAL FIX 4/5 (Macro Definitions - RAW_CHECK(condition, message) Fix)
+    # CRITICAL FIX 4/7 (Macro Definitions - RAW_CHECK(condition, message) Fix)
     # Fix 4a: Replace '::google::LogMessageFatal' with global 'LogMessageFatal'
     sed -i 's/::google::LogMessageFatal/LogMessageFatal/g' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Fix 4b: Insert Operator Counters
+    # Fix 4b: Insert Operator Counters (Needed for CHECK_OPTION_OP)
     sed -i '87i#define _EQ __COUNTER__\n#define _NE __COUNTER__\n#define _LE __COUNTER__\n#define _LT __COUNTER__\n#define _GE __COUNTER__\n#define _GT __COUNTER__' /opt/colmap/src/colmap/util/logging.h && \
     
-    # Fix 4c (THROW_CHECK Fix): Redefine THROW_CHECK_OP for correct expansion.
+    # Fix 4c (THROW_CHECK Fix) - FINAL: Redefine THROW_CHECK macros correctly.
+    # FIX: Delete the entire block of old, conflicting THROW_CHECK macro definitions (Lines 94-114).
     printf '#define THROW_CHECK_OP(op, name, val1, val2) \\\n  RAW_CHECK((val1) op (val2), "") \n\n#define THROW_CHECK(condition) \\\n  LOG_IF(FATAL, (__builtin_expect(!(condition), 0))) << "Check failed: " #condition << ": "\n\n#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(==, _EQ, val1, val2)\n#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(!=, _NE, val1, val2)\n#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(<=, _LE, val1, val2)\n#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(<, _LT, val1, val2)\n#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(>=, _GE, val1, val2)\n#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(>, _GT, val1, val2)\n\n#define THROW_CHECK_NOTNULL(ptr) \\\n  (ptr == NULL ? colmap::LogMessageFatal(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))\n\n#define THROW_CHECK_NOTNULL_T(ptr, exception) \\\n  (ptr == NULL ? colmap::LogMessageFatalThrow<exception>(__FILE__, __LINE__).stream() << "Check failed: " #ptr << " is NULL" : (ptr))' > /tmp/colmap_throw_checks && \
-    sed -i '94,103d' /opt/colmap/src/colmap/util/logging.h && \
+    sed -i '94,114d' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '93 r /tmp/colmap_throw_checks' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_throw_checks && \
     
-    # CRITICAL FIX 5/5 (LogMessageFatalThrow type definition) - REDUX
-    # Defines the LogMessageFatalThrow template struct *outside* the `colmap` namespace.
-    # FIX: We must ensure this definition occurs *after* the `namespace colmap` block is opened.
-    # The previous placement caused LogMessageFatal to be unrecognized. The definition is now injected *after* LogMessageFatal is available.
-    # We remove the previous incorrect sed command for Fix 5/5 and re-insert it later.
-    
-    # CRITICAL FIX 6/6 (Define missing option check function) - REDUX
-    # FIX: Define the missing __CheckOptionOpImpl function required by CHECK_OPTION macros AND the LogMessageFatalThrow structure.
-    # We must insert the LogMessageFatalThrow definition (Fix 5/5) and the __CheckOptionOpImpl definition into the `colmap` namespace.
+    # CRITICAL FIX 5/7 & 6/7 (LogMessageFatalThrow struct and __CheckOptionOpImpl function) - FINAL
+    # Define these inside the `colmap` namespace.
     printf '\n\ntemplate <typename E>\nstruct LogMessageFatalThrow : public google::LogMessageFatal {\n  LogMessageFatalThrow(const char* file, int line) : LogMessageFatal(file, line) {}\n  ~LogMessageFatalThrow() noexcept(false) {\n    throw E(this->str());\n  }\n};\n\ntemplate <typename T, typename U>\ninline bool __CheckOptionOpImpl(const char* file, int line, const char* op_str, const T& v1, const char* expr1, const U& v2, const char* expr2) {\n  return google::CheckOpHelper<T, U>(v1, expr1, v2, expr2, op_str).error_for_program_failure().IsOK();\n}\n' > /tmp/colmap_colmap_logging_fixes && \
-    sed -i 's/namespace colmap {/namespace colmap {/g' /opt/colmap/src/colmap/util/logging.h && \
     sed -i 's/namespace colmap {/namespace colmap {\n\/\/ COLMAP Glog Fixes inserted here\n/g' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/COLMAP Glog Fixes inserted here/r /tmp/colmap_colmap_logging_fixes' /opt/colmap/src/colmap/util/logging.h && \
     sed -i '/COLMAP Glog Fixes inserted here/d' /opt/colmap/src/colmap/util/logging.h && \
     rm /tmp/colmap_colmap_logging_fixes && \
     
     # CRITICAL FIX 7/7 (Clean up VLOG_IS_ON Call Site Fix)
-    # The VLOG_IS_ON macro is now defined in logging.h (Fix 3/5), so we must undo Fix 6/6 from previous attempt.
     sed -i 's/google::GetVLogCommandLine() >= 1/VLOG_IS_ON(1)/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
     sed -i 's/google::GetVLogCommandLine() >= 2/VLOG_IS_ON(2)/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
     sed -i 's/google::GetVLogCommandLine() >= 3/VLOG_IS_ON(3)/g' /opt/colmap/src/colmap/estimators/bundle_adjustment.cc && \
@@ -159,7 +148,6 @@ RUN git clone --depth 1 -b 3.12.3 https://github.com/colmap/colmap.git /opt/colm
     cmake --install /opt/colmap/build && \
     find /opt/colmap/build -name 'libPoseLib.so' -exec cp {} /usr/local/lib/ \; && \
     rm -rf /opt/colmap
-# ---------------------------------------------------------------------
 
 
 

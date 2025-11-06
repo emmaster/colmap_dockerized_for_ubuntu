@@ -9,7 +9,14 @@ echo "COOL I'm here (RTX 4090 Linux COLMAP/GLOMAP Script)"
 ### docker run --rm --gpus all -v "$PWD/VIDEOS:/VIDEOS" -v "$PWD/SCENES:/SCENES" -v "/mounted_media/klsnkv_nas/powerhouse_pc_tasks/colmap_calculations/VIDEOS:/VIDEOS_NAS" -v "/mounted_media/klsnkv_nas/powerhouse_pc_tasks/colmap_calculations/SCENES:/SCENES_NAS"  own_colmap_gpu_glomap_versions
 
 
-
+# --- Helper Function for Time Formatting ---
+format_seconds() {
+    local SECONDS=$1
+    local H=$((SECONDS / 3600))
+    local M=$(( (SECONDS % 3600) / 60 ))
+    local S=$((SECONDS % 60))
+    printf "%02d:%02d:%02d" "$H" "$M" "$S"
+}
 
 
 # This script was created by:
@@ -161,6 +168,10 @@ fi
 
 echo "Starting COLMAP on $NUMBER_OF_VIDEO_FILES video file(s)."
 
+# 1. Start Timer
+START_TIME=$(date +%s)
+echo "Processing started at: $(date '+%Y-%m-%d %H:%M:%S')"
+
 FILES="$VIDEOS_DIR/*"
 
 for FILE in $FILES
@@ -170,8 +181,18 @@ done
 
 echo "Finished."
 
+# 2. End Timer and Calculate Time
+END_TIME=$(date +%s)
+RUN_TIME=$((END_TIME - START_TIME))
+FORMATTED_TIME=$(format_seconds "$RUN_TIME")
+
+echo "--------------------------------------------------------"
+echo "✅ Finished all COLMAP/GLOMAP processing successfully."
+echo "Total Execution Time: $FORMATTED_TIME"
+echo "--------------------------------------------------------"
+
 # COPY BACK TO NAS
 echo "Copying scene files back to NAS ..."
 rm -rf "$SCENES_NAS_DIR"/*
 cp -r "$SCENES_DIR"/* "$SCENES_NAS_DIR"/
-echo "Copy complete. All done."
+echo "Copy complete. All done. Total Execution Time: $FORMATTED_TIME"
